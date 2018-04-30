@@ -1,0 +1,89 @@
+---
+title: "Prediction Assignment"
+output: github_document
+---
+## Introduction
+This project will review data captured from exercise devices of individuals performing a barbell exercise 5 different ways. Using machine learning techniques on a training set, a prediction model will be generated and then evaluated against a hold out testing set.
+
+Special thanks to the groups publishing their data and making it available to the public:
+http://groupware.les.inf.puc-rio.br/har
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+The original training dataset can be found here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The original testing dataset can be found here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+## The Data
+After loading the data, a quick examination shows 160 variables. These capture everything from the name of the participant and timestamp to the pitch, roll and yaw of the exercise being done on X, Y, Z axises. Finally the data is divided into 5 classes (A thru E) to denote the type of motion used to complete the barbell lift.
+
+```{r}
+trainingRaw <- read.csv("pml-training.csv")
+datatoTest <- read.csv("pml-testing.csv")
+dim(trainingRaw)
+```
+
+Not all of the 160 variables will be useful to the analysis. Many are blank or have near zero variance (NZV).
+
+## Processing and Cleaning the Data
+To begin, the training data set will be divided into a training subset and a test subset with a 70/30 ratio. Then reduced to the variables most likely to be the best predictors of the exercise. NZV and variables predominantly N/A are removed. 
+
+```{r}
+library(caret)
+set.seed(42918)
+partition <- createDataPartition(trainingRaw$classe, p = 0.7, list = FALSE)
+training <- trainingRaw[partition, ]
+testing <- trainingRaw[-partition, ]
+
+noVar <- nearZeroVar(trainingRaw)
+
+training <- training[, -noVar]
+testing <- testing [, -noVar]
+
+isNA <- sapply(training, function(x) mean(is.na(x))) > .95
+training <- training[, isNA==FALSE]
+testing <- testing[, isNA==FALSE]
+
+# Columns 1 thru 5 represent timestamp and user names. 
+training <- training[, -(1:5)]
+testing <- testing[, -(1:5)]
+
+dim(training)
+
+```
+
+The dataset has been reduced to 54 variables after cleaning and processing.
+
+
+## Training a Prediction Model
+To start, an exploration using a random forest technique and a generalized boosted model will be used to establish a basline of accuracy.
+
+GBM:
+```{r}
+set.seed(54321)
+
+training$classe = as.factor(training$classe)
+fit2 <- train(classe ~ . , method = "gbm" , verbose = FALSE, data = training)
+fit2p <- predict(fit2, testing)
+confusionMatrix(fit2p, testing$classe)
+```
+
+The GBM model has a 98.8% accuracy, with 1.2% out of sample error.
+
+```{r}
+trC <- trainControl( method = "cv", number = 3)
+fit1 <- train(classe ~ . , method = "rf", trainControl = trC, data = training, ntree = 200)
+
+fit1p <- predict(fit1, testing)
+confusionMatrix(fit1p, testing$classe)
+```
+
+The RandomForest model has a 99.78% accuracy, with a .22% out of sample error.
+
+## Conclusion
+With an accuracy of over 99%, the Random Forest method will be applied to the 20 records in the original pml-testing dataset. Additional methods, or even stacking techniques, could be explored; however, the high accuracy rate does not warrant it for the purposes of this project. 
+
+
